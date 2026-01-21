@@ -44,6 +44,7 @@ The "master" camera class which provides the core functionality and from which t
    :maxdepth: 2
 
    devices/IMAQdx
+   devices/helicam
    devices/pylon
    devices/flycapture2
    devices/spinnaker
