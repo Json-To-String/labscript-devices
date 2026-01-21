@@ -1,8 +1,9 @@
-from labscript import *
+# from labscript import *
+from labscript.labscript.remote import RemoteBLACS
 from labscript_devices.PulseBlaster import PulseBlaster
 from labscript_devices.DummyPseudoclock.labscript_devices import DummyPseudoclock
 from labscript_devices.DummyIntermediateDevice import DummyIntermediateDevice
-from labscript_devices.IMAQdxCamera.labscript_devices import IMAQdxCamera
+from labscript_devices.HeliCam.labscript_devices import HeliCam
 
 MOCK = True
 # labscript_init('test.h5', new=True, overwrite=True)
@@ -16,7 +17,7 @@ else:
     Trigger('camera_trigger', pulseblaster.direct_outputs, 'flag 0')
 
 RemoteBLACS('test_remote', 'localhost')
-IMAQdxCamera(
+HeliCam(
     'camera',
     camera_trigger,
     'trigger',

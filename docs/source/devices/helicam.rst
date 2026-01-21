@@ -1,71 +1,81 @@
-HeliCam Camera
-==============
+Heliotis HeliCam Camera
+=======================
 
 Overview
 ~~~~~~~~
 
-A production-ready labscript device driver for the **Heliotis HeliCam C3** 3D imaging camera. 
-The driver provides full integration with the labscript suite experimental control framework using 
-**direct libHeLIC control** rather than external frameworks like NI-IMAQdx.
+Labscript device driver for the **Heliotis HeliCam C3** lock-in camera. 
+Provides integration with the labscript suite framework using the HeliSDK
+and associated LibHeLIC.
 
 Features:
 
-- Hardware trigger synchronization with nanosecond precision
-- Multiple imaging modes (RAW_IQ, AMPLITUDE, INTENSITY, 3D, etc.)
-- Flexible attribute-based camera configuration
-- Real-time image display and continuous preview
-- Live frame rate monitoring (exponential moving average)
-- Mock mode for testing without hardware
-- Smart attribute caching to minimize camera reprogramming
-- Thread-safe buffered acquisition with timeout protection
-- Comprehensive HDF5 image storage with metadata
+- TODO
 
 Installation
 ~~~~~~~~~~~~
 
-Ensure the libHeLIC library (Heliotis HeliCam Python wrapper) is installed and available in the Python path:
+Ensure the libHeLIC library (Heliotis HeliCam Python wrapper) is installed.
+The driver will attempt to import from the system's program files, which should
+work with the default Heli-SDK install.
 
-.. code-block:: bash
+.. code-block:: python
 
-   # Verify libHeLIC installation:
-   python -c "import libhelic; print(libhelic.__file__)"
+  prgPath = os.environ["PROGRAMFILES"]
 
-Install labscript_devices with HeliCam support:
-
-.. code-block:: bash
-
-   cd labscript_suite/labscript-devices
-   pip install -e .
+  sys.path.insert(0, prgPath + r"\Heliotis\heliCam\Python\wrapper")
+  from libHeLIC import LibHeLIC  # noqa: E402
 
 Usage
 ~~~~~
 
-Connection Table Setup
-``````````````````````
+Example Connection Table
+````````````````````````
 
 .. code-block:: python
 
-   from labscript import *
-   from labscript_devices.HeliCam import HeliCam
-   
-   # Create camera device (requires parent device with digital trigger output)
-   camera = HeliCam(
-       name='helicam',
-       parent_device=your_daq_device,       # Must have digital output
-       connection='PFI0',                   # Trigger output pin
-       serial_number=0x12345678,            # Your camera's serial number
-       trigger_duration=10e-6,              # 10 microsecond trigger pulse
-       orientation='main_chamber',          # For image storage location
-       camera_attributes={                  # libHeLIC settings
-           'SensTqp': 540,                  # Integration time
-           'SensNFrames': 100,              # Number of frames
-           'CamMode': 4,                    # SIMPLE_MAX mode
-           'TrigExtSrcSel': 0,              # Trigger source selection
-       }
-   )
+  from labscript import *
+  from labscript_devices.HeliCam.labscript_devices import HeliCam
+  from labscript_devices.DummyPseudoclock.labscript_devices import DummyPseudoclock
+  from labscript_devices.DummyIntermediateDevice import DummyIntermediateDevice
 
 
-Acquisition Modes
+  dummy_clock = DummyPseudoclock(name="dummy_clock", BLACS_connection="dummy")
+  dummy_daq = DummyIntermediateDevice(
+      name="dummy_device", BLACS_connection="dummy2", parent_device=dummy_clock.clockline
+  )
+
+  camera = HeliCam(
+      name="helicam",
+      parent_device=dummy_daq,
+      connection="c3cam_s170",
+      serial_number="008650",
+      camera_attributes={
+          "SensTqp": 4095,
+          "SensNFrames": 16,
+          "SensNavM2": 255,
+          "CamMode": 0,
+          "DdsGain": 2,
+          "BSEnable": 0,
+          "TrigFreeExtN": 1,
+          "TrigExtSrcSel": 0,
+          "AcqStop": 0,
+          "EnSynFOut": 1,
+      },
+      # manual_mode_camera_attributes={
+      #     'SensTqp' : 4095,           # Shorter integration for faster acquisition
+      #     'SensNavM2' : 255,           # Minimal averaging for speed
+      #     'TrigFreeExtN' : 1,        # Enable free-run mode (software trigger) for continuous
+      # }
+  )
+  if __name__ == "__main__":
+      start()
+
+      stop(1)
+
+
+
+Acquisition Modes (TODO)
 `````````````````
 
 The HeliCam supports three operational modes:
@@ -126,13 +136,13 @@ Common Configuration Attributes:
      - Type
      - Description
    * - SensTqp
-     - int (0-~3000)
+     - int (1-4095)
      - Sensor integration time
    * - SensNFrames
-     - int (1-65535)
+     - int (1-512)
      - Number of frames per trigger
    * - SensNavM2
-     - int (0-1000)
+     - int (0-255)
      - Averaging/navigation factor
    * - CamMode
      - int (0-7)
@@ -145,18 +155,12 @@ Common Configuration Attributes:
      - DDS gain setting
    * - TrigFreeExtN
      - bool (0/1)
-     - 0=free run, 1=external trigger
+     - 0=external trigger, 1=free run / internal
    * - TrigExtSrcSel
      - int
      - External trigger source selection
-   * - ExSimpMaxHwin
-     - int
-     - Extended simple max window size
-   * - Comp11to8
-     - bool (0/1)
-     - 11→8 bit compression
 
-Imaging Modes (CamMode):
+Supported Imaging Modes (CamMode):
 
 .. list-table::
    :header-rows: 1
@@ -168,24 +172,9 @@ Imaging Modes (CamMode):
    * - 0
      - RAW_IQ
      - Complex raw data (In-phase/Quadrature channels)
-   * - 1
-     - AMPLITUDE
-     - Amplitude measurements
-   * - 2
-     - SMOOTH_AMPLITUDE
-     - Smoothed/filtered amplitude
    * - 3
      - INTENSITY
      - Power/intensity measurement
-   * - 4
-     - SIMPLE_MAX
-     - Simple maximum (fastest, peak detection)
-   * - 5
-     - EXTENDED_SIMPLE_MAX
-     - Extended peak detection with filtering
-   * - 7
-     - MIN_ENERGY
-     - Minimum energy mode
 
 
 Image Storage in HDF5
@@ -213,32 +202,6 @@ Access in analysis code:
        background = images['background'][:]
 
 
-Performance Optimization
-~~~~~~~~~~~~~~~~~~~~~~~~
-
-For live preview (fast but noisier):
-
-.. code-block:: python
-
-   camera_attributes = {
-       'SensTqp': 100,           # Short integration time
-       'SensNavM2': 2,           # Minimal averaging
-       'CamMode': 4,             # SIMPLE_MAX (fastest)
-       'SensNFrames': 1,         # Single frame
-   }
-
-For clean science data (slower but cleaner):
-
-.. code-block:: python
-
-   camera_attributes = {
-       'SensTqp': 10000,         # Long integration time
-       'SensNavM2': 100,         # Heavy averaging
-       'CamMode': 3,             # INTENSITY (cleaner)
-       'SensNFrames': 150,       # More frames for averaging
-   }
-
-
 Troubleshooting
 ~~~~~~~~~~~~~~~
 
@@ -252,33 +215,19 @@ Troubleshooting
 
 - Verify trigger connection to camera trigger input
 - Check trigger timing relative to integration time
-- Increase ``stop_acquisition_timeout`` parameter if needed
-- Reduce ``SensNFrames`` or increase ``SensTqp`` to speed acquisition
-
+.. - Increase ``stop_acquisition_timeout`` parameter if needed
+- Reduce ``SensNFrames`` or decrease ``SensNavM2`` to speed acquisition
+- TODO: Framerate
+  
 **No Images Saved to HDF5**
 
 - Check ``failed_shot`` attribute in HDF5 output
 - Verify trigger is actually reaching the camera using BLACS snap mode
 - Ensure ``exception_on_failed_shot`` setting allows partial data
 
-**Low Frame Rate in Continuous Mode**
-
-- Reduce ``SensTqp`` (integration time)
-- Reduce number of frames per trigger
-- Disable other GUI elements consuming CPU
-- Check system load with task manager
-
-**Image Quality Issues**
-
-- Adjust ``SensTqp`` to balance signal level and noise
-- Enable/increase ``SensNavM2`` for averaging and noise reduction
-- Try different ``CamMode`` for your specific application
-- Verify optical focus and alignment
-
 **Black Screen in Display**
 
-- Check grayscale colormap initialization
-- Verify images are being acquired (ZMQ frame rate display)
+- TODO
 - Try restarting BLACS tab
 
 
